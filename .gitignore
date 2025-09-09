@@ -50,3 +50,9 @@ data/
 airflow_logs/
 airflow_plugins/__pycache__/
 dags/__pycache__/
+
+# Office temp/backup files
+~$*
+*~
+
+Dockerfile.airflow
