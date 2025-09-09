@@ -1,0 +1,174 @@
+# docker-compose.yml
+
+volumes:
+  grafana_data: {}
+  airflow_logs: {}
+  airflow_plugins: {}
+  airflow_dags: {}
+  mlruns: {}
+  pgdata: {}   # برای ماندگاری Postgres
+
+networks:
+  front-tier:
+  back-tier:
+
+services:
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: airflow
+    ports:
+      - "5432:5432"
+    networks:
+      - back-tier
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    networks:
+      - back-tier
+      - front-tier
+
+  grafana:
+    image: grafana/grafana-enterprise
+    user: "472"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana_datasources.yaml:/etc/grafana/provisioning/datasources/datasource.yaml:ro
+      - ./config/grafana_dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./dashboards:/opt/grafana/dashboards
+    networks:
+      - back-tier
+      - front-tier
+    restart: always
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.16.0
+    restart: always
+    ports:
+      - "5000:5000"         # UI: http://localhost:5000
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri sqlite:////mlruns/mlflow.db
+      --artifacts-destination /mlartifacts
+    volumes:
+      - mlruns:/mlruns
+      - ./mlartifacts:/mlartifacts
+    networks:
+      - back-tier
+      - front-tier
+
+  airflow-init:
+    image: airflow-custom:2.9.3-py3.10
+    user: "50000:0"
+    entrypoint: ["/bin/bash", "/opt/airflow/scripts/airflow_init.sh"]
+    environment:
+      AIRFLOW_UID: "50000"
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DEFAULT_TIMEZONE: Europe/Amsterdam
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@db:5432/airflow
+      AIRFLOW__SMTP__SMTP_HOST: smtp.gmail.com
+      AIRFLOW__SMTP__SMTP_PORT: "587"
+      AIRFLOW__SMTP__SMTP_USER: ${AIRFLOW_SMTP_USER}
+      AIRFLOW__SMTP__SMTP_PASSWORD: ${AIRFLOW_SMTP_PASSWORD}   
+      AIRFLOW__SMTP__SMTP_MAIL_FROM: ${AIRFLOW_SMTP_USER}
+      AIRFLOW__SMTP__SMTP_STARTTLS: "true"
+      AIRFLOW__EMAIL__EMAIL_BACKEND: airflow.utils.email.send_email_smtp
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO}
+    volumes:
+      - airflow_dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - ./dags:/opt/airflow/dags
+      - ./scripts:/opt/airflow/scripts:ro
+      - ./data:/opt/airflow/data:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - back-tier
+
+  airflow-webserver:
+    image: airflow-custom:2.9.3-py3.10
+    command: webserver
+    restart: always
+    ports:
+      - "8082:8080"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@db:5432/airflow
+      AIRFLOW__SMTP__SMTP_HOST: smtp.gmail.com
+      AIRFLOW__SMTP__SMTP_PORT: "587"
+      AIRFLOW__SMTP__SMTP_USER: ${AIRFLOW_SMTP_USER}
+      AIRFLOW__SMTP__SMTP_PASSWORD: ${AIRFLOW_SMTP_PASSWORD}   
+      AIRFLOW__SMTP__SMTP_MAIL_FROM: ${AIRFLOW_SMTP_USER}
+      AIRFLOW__SMTP__SMTP_STARTTLS: "true"
+      AIRFLOW__EMAIL__EMAIL_BACKEND: airflow.utils.email.send_email_smtp
+# to read metrics and connect to postgres
+      AIRFLOW_CONN_METRICS_DB: postgresql+psycopg2://postgres:postgres@db:5432/airflow
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO}
+    volumes:
+      - airflow_dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - ./dags:/opt/airflow/dags
+      - ./models:/opt/airflow/models
+      - ./jobs:/opt/airflow/jobs
+      - ./data:/opt/airflow/data:ro
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      - back-tier
+      - front-tier
+
+  airflow-scheduler:
+    image: airflow-custom:2.9.3-py3.10
+    command: scheduler
+    restart: always
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000 
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@db:5432/airflow
+      AIRFLOW__SMTP__SMTP_HOST: smtp.gmail.com
+      AIRFLOW__SMTP__SMTP_PORT: "587"
+      AIRFLOW__SMTP__SMTP_USER: ${AIRFLOW_SMTP_USER}
+      AIRFLOW__SMTP__SMTP_PASSWORD: ${AIRFLOW_SMTP_PASSWORD}   
+      AIRFLOW__SMTP__SMTP_MAIL_FROM: ${AIRFLOW_SMTP_USER}
+      AIRFLOW__SMTP__SMTP_STARTTLS: "true"
+      AIRFLOW__EMAIL__EMAIL_BACKEND: airflow.utils.email.send_email_smtp
+      ALERT_EMAIL_TO: ${ALERT_EMAIL_TO}
+    volumes:
+      - airflow_dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+      - airflow_plugins:/opt/airflow/plugins
+      - ./dags:/opt/airflow/dags
+      - ./models:/opt/airflow/models
+      - ./jobs:/opt/airflow/jobs
+      - ./data:/opt/airflow/data:ro
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      - back-tier

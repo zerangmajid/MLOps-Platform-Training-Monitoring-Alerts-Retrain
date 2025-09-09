@@ -1,0 +1,10 @@
+prefect
+tqdm
+requests
+joblib
+pyarrow
+psycopg[binary]
+evidently==0.6.7
+pandas
+numpy
+scikit-learn

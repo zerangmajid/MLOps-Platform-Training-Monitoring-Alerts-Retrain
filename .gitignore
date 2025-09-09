@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+
+# Logs
+logs/
+*.log
+
+# Env & secrets
+.env
+*.env
+.env.*.local
+
+# Docker / Services data (do NOT commit volumes)
+grafana_data/
+pgdata/
+postgres-data/
+initdb/
+
+# MLflow & model artifacts (generated)
+mlruns/
+mlartifacts/
+models/*.bin
+models/*.pkl
+models/*.h5
+models/*.onnx
+**/artifacts/
+
+# Data dumps
+data/
+
+# Airflow (local runtime logs etc.)
+airflow_logs/
+airflow_plugins/__pycache__/
+dags/__pycache__/

@@ -1,0 +1,8 @@
+psycopg[binary]
+pytz
+pandas
+numpy
+scikit-learn
+pyarrow
+joblib
+prefect
